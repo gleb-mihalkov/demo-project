@@ -4,22 +4,38 @@ const fs = require('fs');
 const externals = require('webpack-node-externals');
 const TsConfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
+/**
+ * Преобразует строковое значение в логическое.
+ * @param  {String} value Значение.
+ * @return {Boolean}       Логическое значение.
+ */
+const parseBoolean = value => {
+  const text = String(value).toLowerCase();
+  return text !== 'false' && text !== '0' && text !== 'off' && Boolean(value);
+};
+
+/**
+ * Преобразует строковое значение в число.
+ * @param  {String} value Строка.
+ * @return {Number}       Число.
+ */
+const parseNumber = value => {
+  const number = Number(value);
+  return Number.isNaN(number) ? undefined : number;
+};
+
+/**
+ * Возвращает первый из аргументов, который нельзя привести к null.
+ * @param  {any[]} args Массив значений.
+ * @return {any}        Значение.
+ */
+const getFirstDefined = (...args) => args.find(value => value != null);
+
 module.exports = (_, args) => {
-  const getBoolean = value => {
-    const text = String(value).toLowerCase();
-    return text !== 'false' && text !== '0' && text !== 'off' && Boolean(value);
-  };
-
-  const getNumber = value => {
-    const number = Number(value);
-    return Number.isNaN(number) ? undefined : number;
-  };
-
-  const getDefined = (...args) => args.find(value => value !== undefined);
   const byRoot = (...args) => path.resolve(__dirname, ...args);
 
-  const mode = getDefined(process.env.NODE_ENV, args.mode, 'development');
-  const target = getDefined(process.env.APP_TARGET, args.target, 'web');
+  const mode = getFirstDefined(process.env.NODE_ENV, args.mode, 'development');
+  const target = getFirstDefined(process.env.APP_TARGET, args.target, 'web');
 
   const parseEnv = name => dotenv.config({ path: byRoot(name) }).parsed;
 
@@ -34,21 +50,21 @@ module.exports = (_, args) => {
     .filter(key => /^APP_/.test(key))
     .reduce((env, key) => ({ ...env, [key]: process.env[key] }), {});
 
-  const https = getBoolean(
-    getDefined(systemEnv.APP_HTTPS, args.https, fileEnv.APP_HTTPS, false)
+  const https = parseBoolean(
+    getFirstDefined(systemEnv.APP_HTTPS, args.https, fileEnv.APP_HTTPS, false)
   );
-  const host = getDefined(
+  const host = getFirstDefined(
     systemEnv.APP_HOST,
     args.host,
     fileEnv.APP_HOST,
     'localhost'
   );
-  const port = getNumber(
-    getDefined(systemEnv.APP_PORT, args.port, fileEnv.APP_PORT, 8080)
+  const port = parseNumber(
+    getFirstDefined(systemEnv.APP_PORT, args.port, fileEnv.APP_PORT, 8080)
   );
   const protocol = https ? 'https' : 'http';
 
-  let pathname = getDefined(
+  let pathname = getFirstDefined(
     systemEnv.APP_PATHNAME,
     args.pathname,
     fileEnv.APP_PATHNAME,
@@ -69,19 +85,19 @@ module.exports = (_, args) => {
     baseUrl += pathname;
   }
 
-  const publicFolder = getDefined(
+  const publicFolder = getFirstDefined(
     systemEnv.APP_PUBLIC,
     args.public,
     fileEnv.APP_PUBLIC,
     'public'
   );
-  const outputFolder = getDefined(
+  const outputFolder = getFirstDefined(
     systemEnv.APP_OUTPUT,
     args.output,
     fileEnv.APP_OUTPUT,
     'build'
   );
-  const sourceFolder = getDefined(
+  const sourceFolder = getFirstDefined(
     systemEnv.APP_SOURCE,
     args.source,
     fileEnv.APP_SOURCE,
