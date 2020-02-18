@@ -5,38 +5,55 @@ const externals = require('webpack-node-externals');
 const TsConfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
 module.exports = (_, args) => {
-  const bln = value => {
+  const getBoolean = value => {
     const text = String(value).toLowerCase();
     return text !== 'false' && text !== '0' && text !== 'off' && Boolean(value);
   };
 
-  const nbr = value => {
-    const item = Number(value);
-    return Number.isNaN(item) ? undefined : item;
+  const getNumber = value => {
+    const number = Number(value);
+    return Number.isNaN(number) ? undefined : number;
   };
 
-  const fst = (...args) => args.find(item => item !== undefined);
-  const rt = (...args) => path.resolve(__dirname, ...args);
+  const getDefined = (...args) => args.find(value => value !== undefined);
+  const byRoot = (...args) => path.resolve(__dirname, ...args);
 
-  const mode = fst(process.env.NODE_ENV, args.mode, 'development');
-  const target = fst(process.env.APP_TARGET, args.target, 'web');
+  const mode = getDefined(process.env.NODE_ENV, args.mode, 'development');
+  const target = getDefined(process.env.APP_TARGET, args.target, 'web');
 
-  const cmEnv = dotenv.config({ path: rt(`.env.${mode}`) }).parsed;
-  const cEnv = dotenv.config({ path: rt('.env') }).parsed;
-  const lmEnv = dotenv.config({ path: rt(`.env.${mode}.local`) }).parsed;
-  const lEnv = dotenv.config({ path: rt('.env.local') }).parsed;
-  const fEnv = { ...cEnv, ...lEnv, ...cmEnv, ...lmEnv };
+  const parseEnv = name => dotenv.config({ path: byRoot(name) }).parsed;
 
-  const sEnv = Object.keys(process.env)
+  const fileEnv = {
+    ...parseEnv('.env'),
+    ...parseEnv('.env.local'),
+    ...parseEnv(`.env.${mode}`),
+    ...parseEnv(`.env.${mode}.local`)
+  };
+
+  const systemEnv = Object.keys(process.env)
     .filter(key => /^APP_/.test(key))
     .reduce((env, key) => ({ ...env, [key]: process.env[key] }), {});
 
-  const https = bln(fst(sEnv.APP_HTTPS, args.https, fEnv.APP_HTTPS, false));
-  const host = fst(sEnv.APP_HOST, args.host, fEnv.APP_HOST, 'localhost');
-  const port = nbr(fst(sEnv.APP_PORT, args.port, fEnv.APP_PORT, 8080));
+  const https = getBoolean(
+    getDefined(systemEnv.APP_HTTPS, args.https, fileEnv.APP_HTTPS, false)
+  );
+  const host = getDefined(
+    systemEnv.APP_HOST,
+    args.host,
+    fileEnv.APP_HOST,
+    'localhost'
+  );
+  const port = getNumber(
+    getDefined(systemEnv.APP_PORT, args.port, fileEnv.APP_PORT, 8080)
+  );
   const protocol = https ? 'https' : 'http';
 
-  let pathname = fst(sEnv.APP_PATHNAME, args.pathname, fEnv.APP_PATHNAME, '/');
+  let pathname = getDefined(
+    systemEnv.APP_PATHNAME,
+    args.pathname,
+    fileEnv.APP_PATHNAME,
+    '/'
+  );
 
   if (pathname !== '/') {
     pathname = pathname.replace(/\/$/, '');
@@ -52,13 +69,28 @@ module.exports = (_, args) => {
     baseUrl += pathname;
   }
 
-  const pblDir = fst(sEnv.APP_PUBLIC, args.public, fEnv.APP_PUBLIC, 'public');
-  const dstDir = fst(sEnv.APP_OUTPUT, args.output, fEnv.APP_OUTPUT, 'build');
-  const srcDir = fst(sEnv.APP_SOURCE, args.source, fEnv.APP_SOURCE, 'src');
-  const dst = (...args) => rt(dstDir, ...args);
-  const src = (...args) => rt(srcDir, ...args);
-  const pbl = (...args) => rt(pblDir, ...args);
-  const pth = (...args) => path.join(pathname, ...args);
+  const publicFolder = getDefined(
+    systemEnv.APP_PUBLIC,
+    args.public,
+    fileEnv.APP_PUBLIC,
+    'public'
+  );
+  const outputFolder = getDefined(
+    systemEnv.APP_OUTPUT,
+    args.output,
+    fileEnv.APP_OUTPUT,
+    'build'
+  );
+  const sourceFolder = getDefined(
+    systemEnv.APP_SOURCE,
+    args.source,
+    fileEnv.APP_SOURCE,
+    'src'
+  );
+  const byOutput = (...args) => byRoot(outputFolder, ...args);
+  const bySource = (...args) => byRoot(sourceFolder, ...args);
+  const byPublic = (...args) => byRoot(publicFolder, ...args);
+  const byPathname = (...args) => path.join(pathname, ...args);
 
   const isProd = mode === 'production';
   const isDev = mode === 'development';
@@ -72,19 +104,19 @@ module.exports = (_, args) => {
     .reduce((list, ext) => {
       const self = entryName && `${entryName}.${ext}`;
       const file = `${entryName}${entryName ? '/' : ''}index${ext}`;
-      const item = [self, file].filter(Boolean).map(file => src(file));
+      const item = [self, file].filter(Boolean).map(file => bySource(file));
       return [...list, ...item];
     }, [])
     .find(fs.existsSync);
 
   const env = {
-    ...sEnv,
-    ...fEnv,
+    ...systemEnv,
+    ...fileEnv,
     NODE_ENV: mode,
     APP_TARGET: target,
-    APP_SOURCE: dst(),
-    APP_OUTPUT: src(),
-    APP_PUBLIC: pbl(),
+    APP_SOURCE: byOutput(),
+    APP_OUTPUT: bySource(),
+    APP_PUBLIC: byPublic(),
     APP_HOST: host,
     APP_PORT: port,
     APP_PATHNAME: pathname,
@@ -95,21 +127,23 @@ module.exports = (_, args) => {
   return {
     mode,
     target,
-    context: rt(),
+    context: byRoot(),
     externals: isNode ? [externals()] : undefined,
     devtool: isDev ? 'source-map' : undefined,
     stats: { children: false },
     entry: { main: entry },
     output: {
       filename: isNode ? 'server.js' : '[name].[chunkhash].js',
-      path: dst(),
-      publicPath: pth(),
+      path: byOutput(),
+      publicPath: byPathname(),
       library: isNode ? 'main' : undefined,
       libraryTarget: isNode ? 'commonjs2' : undefined
     },
     resolve: {
       extensions: exts,
-      plugins: [new TsConfigPathsPlugin({ configFile: rt('tsconfig.json') })]
+      plugins: [
+        new TsConfigPathsPlugin({ configFile: byRoot('tsconfig.json') })
+      ]
     }
   };
 };
