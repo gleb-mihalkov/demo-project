@@ -163,10 +163,16 @@ module.exports = (_, args) => {
   env.APP_ENTRY = env.APP_EXTENSIONS_LIST.reduce(
     (result, extension) =>
       env.APP_TARGET === 'node'
-        ? [...result, `server${extension}`, `server/index${extension}`]
+        ? [
+            ...result,
+            `server${extension}`,
+            `server${path.sep}index${extension}`
+          ]
         : [...result, `index${extension}`],
     []
-  ).find(fs.existsSync);
+  )
+    .map(file => path.join(env.APP_SOURCE_PATH, file))
+    .find(fs.existsSync);
 
   return {
     mode: env.NODE_ENV,
