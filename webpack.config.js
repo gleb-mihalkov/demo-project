@@ -5,15 +5,56 @@ const url = require('url');
 const externals = require('webpack-node-externals');
 const TsConfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
+/**
+ * Настройка сборки происходит через переменные окружения.
+ *
+ * Настройки:
+ *
+ * NODE_ENV - Режим сборки проекта. По умолчанию 'development'.
+ * APP_SOURCE_PATH - Путь к каталогу с исходным кодом относительно корня
+ * проекта. По умолчанию './src'.
+ * APP_OUTPUT_PATH - Путь к каталогу, в который происходит сборка, относительно
+ * корня проекта. По умолчанию './public'.
+ * APP_PUBLIC_PATH - Путь к статическим файлам проекта, которые будут
+ * скопированы в целевой каталог (APP_OUTPUT_PATH) без каких-либо изменений. По
+ * умолчанию './public'.
+ * APP_BASE_URL - Адрес сайта (например, https://domain.com:8080/subpath). По
+ * умолчанию 'http://localhost:8080'.
+ * APP_EXTENSIONS - Список расширений у файлов скриптов (например, .jsx,.js). По
+ * умолчанию '.tsx,.ts,.jsx,.js'.
+ * APP_CLIENT_ENTRY - Имя точки сборки клиентской стороны сайта без расширения.
+ * По умолчанию './index'.
+ * APP_SERVER_ENTRY - Имя точки сборки серверной части сайта без расширения. По
+ * умолчанию './server/index'.
+ *
+ * process.env:
+ *
+ * NODE_ENV - Режим сборки проекта.
+ * APP_TARGET - Целевая среда сборки проекта (node или web).
+ * APP_ROOT_PATH - Абсолютный путь к корневому каталогу проекта.
+ * APP_SOURCE_PATH - Абсолютный путь к каталогу с исходным кодом.
+ * APP_OUTPUT_PATH - Абсолютный путь к каталогу, в который происходит сборка.
+ * APP_PUBLIC_PATH - Абсолютный путь к каталогу со статическими файлами сайта.
+ * APP_BASE_URL - Адрес сайта.
+ * APP_HTTPS - True, если сайт работает по протоколу https.
+ * APP_HOST - Имя хоста сайта.
+ * APP_PORT - Номер порта сайта.
+ * APP_PATHNAME - Базовый путь в URL сайта.
+ * APP_EXTENSIONS - Массив расширений у файлов скриптов.
+ * APP_ENTRY - Абсолютный путь к файла точки сборки сайта.
+ */
+
 module.exports = (_, args) => {
-  const defaultEnv = {
+  const defaultOptions = {
     NODE_ENV: 'development',
     APP_TARGET: 'web',
-    APP_PUBLIC_DIR: 'public',
-    APP_OUTPUT_DIR: 'build',
-    APP_SOURCE_DIR: 'src',
+    APP_PUBLIC_PATH: './public',
+    APP_OUTPUT_PATH: './build',
+    APP_SOURCE_PATH: './src',
     APP_BASE_URL: 'http://localhost:8080',
-    APP_EXTENSIONS: '.tsx,.ts,.jsx,.js'
+    APP_EXTENSIONS: '.tsx,.ts,.jsx,.js',
+    APP_CLIENT_ENTRY: './index',
+    APP_SERVER_ENTRY: './server/index'
   };
 
   const filterEnv = env => {
@@ -27,11 +68,6 @@ module.exports = (_, args) => {
 
   const parseEnv = file => dotenv.config({ path: file }).parsed;
 
-  const parseBoolean = value => {
-    const text = String(value).toLowerCase();
-    return text !== 'false' && text !== '0' && text !== 'off' && Boolean(value);
-  };
-
   const parseNumber = value => {
     const number = Number(value);
     return Number.isNaN(number) ? undefined : number;
@@ -40,162 +76,98 @@ module.exports = (_, args) => {
   const parseArray = value =>
     value.split(',').map(item => item.replace(/^\s+|\s+$/g, ''));
 
-  let env = filterEnv(process.env);
+  const findEntry = (extensions, name) =>
+    extensions.map(extension => `${name}${extension}`).find(fs.existsSync);
 
-  const target = env.APP_TARGET || args.target || defaultEnv.APP_TARGET;
-  const mode = env.NODE_ENV || args.mode || defaultEnv.NODE_ENV;
+  const target =
+    process.env.APP_TARGET || args.target || defaultOptions.APP_TARGET;
+  const mode = process.env.NODE_ENV || args.mode || defaultOptions.NODE_ENV;
+
+  const systemEnv = process.env;
+  const rootPath = __dirname;
+
+  const fileEnv = {
+    ...parseEnv(path.join(rootPath, '.env')),
+    ...parseEnv(path.join(rootPath, '.env.local')),
+    ...parseEnv(path.join(rootPath, `.env.${mode}`)),
+    ...parseEnv(path.join(rootPath, `.env.${mode}.local`))
+  };
+
+  const options = {
+    ...defaultOptions,
+    ...fileEnv,
+    ...systemEnv
+  };
+
+  let baseUrl = url.parse(options.APP_BASE_URL);
+
+  const protocol = baseUrl.protocol || 'http:';
+  const pathname = baseUrl.pathname || '/';
+  const hostname = baseUrl.hostname || 'localhost';
+  const port = parseNumber(baseUrl.port || 80);
+  const https = protocol === 'https:';
+
+  baseUrl = `${protocol}//${hostname}:${port}${pathname}`
+    .replace(/\/$/, '')
+    .replace(/:80(\/.*)?$/, '$1');
+
+  const sourcePath = path.resolve(rootPath, options.APP_SOURCE_PATH);
+  const outputPath = path.resolve(rootPath, options.APP_OUTPUT_PATH);
+  const publicPath = path.resolve(rootPath, options.APP_PUBLIC_PATH);
+
+  const extensions = parseArray(options.APP_EXTENSIONS);
+
+  const entry = findEntry(
+    extensions,
+    path.join(
+      sourcePath,
+      target === 'node' ? options.APP_SERVER_ENTRY : options.APP_CLIENT_ENTRY
+    )
+  );
+
+  let tsconfigPath = path.join(rootPath, 'tsconfig.json');
+  tsconfigPath = fs.existsSync(tsconfigPath) ? tsconfigPath : undefined;
 
   env = {
-    ...env,
-    APP_ROOT_PATH: __dirname,
+    ...filterEnv(fileEnv),
+    ...filterEnv(systemEnv),
+    APP_ROOT_PATH: rootPath,
     APP_TARGET: target,
     BABEL_ENV: mode,
-    NODE_ENV: mode
-  };
-
-  env = {
-    ...parseEnv(path.join(env.APP_ROOT_PATH, '.env')),
-    ...parseEnv(path.join(env.APP_ROOT_PATH, '.env.local')),
-    ...parseEnv(path.join(env.APP_ROOT_PATH, `.env.${mode}`)),
-    ...parseEnv(path.join(env.APP_ROOT_PATH, `.env.${mode}.local`)),
-    ...env
-  };
-
-  let baseUrl;
-  let protocol;
-  let https;
-  let host;
-  let hostname;
-  let port;
-  let pathname;
-
-  if (env.APP_BASE_URL) {
-    baseUrl = url.parse(env.APP_BASE_URL);
-
-    protocol = baseUrl.protocol;
-    https = protocol === 'https:';
-    host = baseUrl.host;
-    hostname = baseUrl.hostname;
-    port = parseNumber(baseUrl.port);
-    pathname = baseUrl.pathname;
-  } else {
-    if (env.APP_URL_HTTPS) {
-      https = parseBoolean(env.APP_ENV_HTTPS);
-      protocol = https ? 'https:' : 'http';
-    } else {
-      protocol = env.APP_URL_PROTOCOL || 'http:';
-      https = protocol === 'https:';
-    }
-
-    if (env.APP_URL_HOST) {
-      host = env.APP_URL_HOST.split(':');
-      hostname = host[0];
-      port = parseNumber(host[1]) || 80;
-    } else {
-      hostname = env.APP_URL_HOSTNAME || 'localhost';
-      port = parseNumber(env.APP_URL_PORT) || 8080;
-    }
-
-    host = `${hostname}${port !== 80 ? `:${port}` : ''}`;
-    pathname = env.APP_URL_PATHNAME || '/';
-  }
-
-  baseUrl = `${protocol}//${host}${pathname !== '/' ? pathname : ''}`;
-
-  env = {
-    ...env,
-    APP_BASE_URL: baseUrl,
-    APP_HTTPS: https,
-    APP_URL_PROTOCOL: protocol,
-    APP_URL_HOST: host,
-    APP_URL_HOSTNAME: hostname,
-    APP_URL_PORT: port,
-    APP_URL_PATHNAME: pathname
-  };
-
-  let publicPath;
-  let sourcePath;
-  let outputPath;
-  let publicDir;
-  let sourceDir;
-  let outputDir;
-
-  if (env.APP_PUBLIC_PATH) {
-    publicPath = env.APP_PUBLIC_PATH;
-    publicDir = path.relative(env.APP_ROOT_PATH, publicPath);
-  } else {
-    publicDir = env.APP_PUBLIC_DIR || defaultEnv.APP_PUBLIC_DIR;
-    publicPath = path.resolve(env.APP_ROOT_PATH, publicDir);
-  }
-  if (env.APP_SOURCE_PATH) {
-    sourcePath = env.APP_SOURCE_PATH;
-    sourceDir = path.relative(env.APP_ROOT_PATH, sourcePath);
-  } else {
-    sourceDir = env.APP_SOURCE_DIR || defaultEnv.APP_SOURCE_DIR;
-    sourcePath = path.resolve(env.APP_ROOT_PATH, sourceDir);
-  }
-  if (env.APP_OUTPUT_PATH) {
-    outputPath = env.APP_OUTPUT_PATH;
-    outputDir = path.relative(env.APP_ROOT_PATH, outputPath);
-  } else {
-    outputDir = env.APP_OUTPUT_DIR || defaultEnv.APP_OUTPUT_DIR;
-    outputPath = path.resolve(env.APP_ROOT_PATH, outputDir);
-  }
-
-  env = {
-    ...env,
+    NODE_ENV: mode,
     APP_SOURCE_PATH: sourcePath,
     APP_OUTPUT_PATH: outputPath,
     APP_PUBLIC_PATH: publicPath,
-    APP_SOURCE_DIR: sourceDir,
-    APP_OUTPUT_DIR: outputDir,
-    APP_PUBLIC_DIR: publicDir
+    APP_BASE_URL: baseUrl,
+    APP_HTTPS: https,
+    APP_HOST: hostname,
+    APP_PORT: port,
+    APP_PATHNAME: pathname,
+    APP_ENTRY: entry,
+    APP_EXTENSIONS: extensions
   };
-
-  const extensions = env.APP_EXTENSIONS || defaultEnv.APP_EXTENSIONS;
-
-  env = {
-    ...env,
-    APP_EXTENSIONS: extensions,
-    APP_EXTENSIONS_LIST: parseArray(extensions)
-  };
-
-  env.APP_ENTRY = env.APP_EXTENSIONS_LIST.reduce(
-    (result, extension) =>
-      env.APP_TARGET === 'node'
-        ? [
-            ...result,
-            `server${extension}`,
-            `server${path.sep}index${extension}`
-          ]
-        : [...result, `index${extension}`],
-    []
-  )
-    .map(file => path.join(env.APP_SOURCE_PATH, file))
-    .find(fs.existsSync);
 
   return {
-    mode: env.NODE_ENV,
-    target: env.APP_TARGET,
-    context: env.APP_ROOT_PATH,
-    externals: env.APP_TARGET === 'node' ? [externals()] : undefined,
-    devtool: env.NODE_ENV === 'development' ? 'source-map' : undefined,
+    mode,
+    target,
+    context: rootPath,
+    externals: target === 'node' ? [externals()] : undefined,
+    devtool: mode === 'development' ? 'source-map' : undefined,
     stats: { children: false },
-    entry: { main: env.APP_ENTRY },
+    entry: { main: entry },
     output: {
-      filename:
-        env.APP_TARGET === 'node' ? 'server.js' : '[name].[chunkhash].js',
-      path: env.APP_OUTPUT_PATH,
-      publicPath: env.APP_URL_PATHNAME,
-      library: env.APP_TARGET === 'node' ? 'main' : undefined,
-      libraryTarget: env.APP_TARGET === 'node' ? 'commonjs2' : undefined
+      filename: target === 'node' ? 'server.js' : '[name].[chunkhash].js',
+      path: outputPath,
+      publicPath: pathname,
+      library: target === 'node' ? 'main' : undefined,
+      libraryTarget: target === 'node' ? 'commonjs2' : undefined
     },
     resolve: {
-      extensions: env.APP_EXTENSIONS_LIST,
+      extensions,
       plugins: [
-        new TsConfigPathsPlugin({
-          configFile: path.join(env.APP_ROOT_PATH, 'tsconfig.json')
-        })
+        ...(tsconfigPath
+          ? [new TsConfigPathsPlugin({ configFile: tsconfigPath })]
+          : [])
       ]
     }
   };
