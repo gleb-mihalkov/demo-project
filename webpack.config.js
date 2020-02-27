@@ -170,8 +170,8 @@ module.exports = (_, args) => {
   const isWeb = target === 'web';
 
   return {
-    mode,
     target,
+    mode,
     context: rootPath,
     devtool: isDevelopment ? 'source-map' : undefined,
     externals: isNode ? [externals()] : undefined,
