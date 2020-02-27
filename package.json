@@ -5,15 +5,24 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "webpack"
+    "build": "rimraf ./build && webpack --target=web && webpack --target=node"
   },
   "author": "gm",
   "license": "ISC",
   "devDependencies": {
+    "compression-webpack-plugin": "^3.1.0",
+    "copy-webpack-plugin": "^5.1.1",
     "dotenv": "^8.2.0",
+    "fork-ts-checker-webpack-plugin": "^4.0.5",
+    "html-webpack-plugin": "^3.2.0",
+    "rimraf": "^3.0.2",
     "tsconfig-paths-webpack-plugin": "^3.2.0",
+    "typescript": "^3.8.2",
     "webpack": "^4.41.6",
     "webpack-cli": "^3.3.11",
     "webpack-node-externals": "^1.7.2"
+  },
+  "dependencies": {
+    "@types/node": "^13.7.6"
   }
 }
