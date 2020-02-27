@@ -175,7 +175,7 @@ module.exports = (_, args) => {
     context: rootPath,
     devtool: isDevelopment ? 'source-map' : undefined,
     externals: isNode ? [externals()] : undefined,
-    stats: 'errors-warnings',
+    stats: isProduction ? 'errors-warnings' : { children: false },
     entry: entry,
     output: {
       filename: isNode ? 'server.js' : '[name].[hash].js',
