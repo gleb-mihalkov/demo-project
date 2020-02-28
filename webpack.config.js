@@ -60,7 +60,6 @@ const TsConfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 const HtmlPlugin = require('html-webpack-plugin');
 const CopyPlugin = require('copy-webpack-plugin');
 const CompressionPlugin = require('compression-webpack-plugin');
-const TsCheckerPlugin = require('fork-ts-checker-webpack-plugin');
 const MomentPlugin = require('moment-locales-webpack-plugin');
 const LoadablePlugin = require('@loadable/webpack-plugin');
 const { DefinePlugin } = require('webpack');
@@ -209,18 +208,9 @@ module.exports = (_, args) => {
     },
     plugins: [
       new DefinePlugin(stringifyEnv(env)),
-      new TsCheckerPlugin({
-        tsconfig: path.resolve(rootPath, 'tsconfig.json'),
-        reportFiles: path.relative(
-          rootPath,
-          path.join(sourcePath, '**/*.{ts,tsx}')
-        ),
-        silent: true
-      }),
       new MomentPlugin({
         localesToKeep: [locale]
       }),
-      new LoadablePlugin(),
       ...(web
         ? [
             new CopyPlugin([
@@ -234,7 +224,28 @@ module.exports = (_, args) => {
               template: path.resolve(publicPath, 'index.html')
             })
           ]
-        : [])
-    ]
+        : [new LoadablePlugin()])
+    ],
+    module: {
+      rules: [
+        {
+          test: /\.(t|j)sx?$/,
+          include: sourcePath,
+          use: [
+            {
+              loader: 'ts-loader',
+              options: {
+                configFile: path.resolve(rootPath, 'tsconfig.json'),
+                onlyCompileBundledFiles: true
+              }
+            },
+            {
+              loader: 'babel-loader',
+              options: {}
+            }
+          ]
+        }
+      ]
+    }
   };
 };
