@@ -134,6 +134,11 @@ module.exports = (_, args) => {
     ...systemEnv
   };
 
+  const isDevelopment = mode === 'development';
+  const isProduction = mode === 'production';
+  const isNode = target === 'node';
+  const isWeb = target === 'web';
+
   let baseUrl = url.parse(options.APP_BASE_URL);
 
   const protocol = baseUrl.protocol || 'http:';
@@ -156,7 +161,7 @@ module.exports = (_, args) => {
     extensions,
     path.join(
       sourcePath,
-      target === 'node' ? options.APP_SERVER_ENTRY : options.APP_CLIENT_ENTRY
+      isNode ? options.APP_SERVER_ENTRY : options.APP_CLIENT_ENTRY
     )
   );
 
@@ -181,11 +186,6 @@ module.exports = (_, args) => {
     APP_EXTENSIONS: extensions,
     APP_LOCALE: locale
   };
-
-  const isDevelopment = mode === 'development';
-  const isProduction = mode === 'production';
-  const isNode = target === 'node';
-  const isWeb = target === 'web';
 
   return {
     target,
