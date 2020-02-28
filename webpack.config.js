@@ -63,11 +63,7 @@ const CompressionPlugin = require('compression-webpack-plugin');
 const TsCheckerPlugin = require('fork-ts-checker-webpack-plugin');
 const MomentPlugin = require('moment-locales-webpack-plugin');
 const LoadablePlugin = require('@loadable/webpack-plugin');
-const {
-  NamedModulesPlugin,
-  HotModuleReplacementPlugin,
-  DefinePlugin
-} = require('webpack');
+const { DefinePlugin } = require('webpack');
 
 module.exports = (_, args) => {
   const defaultOptions = {
@@ -225,9 +221,6 @@ module.exports = (_, args) => {
         localesToKeep: [locale]
       }),
       new LoadablePlugin(),
-      ...(development
-        ? [new HotModuleReplacementPlugin(), new NamedModulesPlugin()]
-        : []),
       ...(web
         ? [
             new CopyPlugin([
