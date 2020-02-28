@@ -134,10 +134,10 @@ module.exports = (_, args) => {
     ...systemEnv
   };
 
-  const isDevelopment = mode === 'development';
-  const isProduction = mode === 'production';
-  const isNode = target === 'node';
-  const isWeb = target === 'web';
+  const development = mode === 'development';
+  const production = mode === 'production';
+  const node = target === 'node';
+  const web = target === 'web';
 
   let baseUrl = url.parse(options.APP_BASE_URL);
 
@@ -161,7 +161,7 @@ module.exports = (_, args) => {
     extensions,
     path.join(
       sourcePath,
-      isNode ? options.APP_SERVER_ENTRY : options.APP_CLIENT_ENTRY
+      node ? options.APP_SERVER_ENTRY : options.APP_CLIENT_ENTRY
     )
   );
 
@@ -191,16 +191,16 @@ module.exports = (_, args) => {
     target,
     mode,
     context: rootPath,
-    devtool: isDevelopment ? 'source-map' : undefined,
-    externals: isNode ? [externals()] : undefined,
-    stats: isProduction ? 'errors-warnings' : { children: false },
+    devtool: development ? 'source-map' : undefined,
+    externals: node ? [externals()] : undefined,
+    stats: production ? 'errors-warnings' : { children: false },
     entry: entry,
     output: {
-      filename: isNode ? 'server.js' : '[name].[hash].js',
+      filename: node ? 'server.js' : '[name].[hash].js',
       path: outputPath,
       publicPath: pathname,
-      libraryTarget: isNode ? 'commonjs2' : undefined,
-      library: isNode ? 'main' : undefined
+      libraryTarget: node ? 'commonjs2' : undefined,
+      library: node ? 'main' : undefined
     },
     resolve: {
       extensions,
@@ -225,10 +225,10 @@ module.exports = (_, args) => {
         localesToKeep: [locale]
       }),
       new LoadablePlugin(),
-      ...(isDevelopment
+      ...(development
         ? [new HotModuleReplacementPlugin(), new NamedModulesPlugin()]
         : []),
-      ...(isWeb
+      ...(web
         ? [
             new CopyPlugin([
               {
