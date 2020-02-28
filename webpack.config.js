@@ -29,6 +29,8 @@
  * APP_SERVER_ENTRY - Имя точки сборки серверной части сайта без расширения
  * относительно каталога с исходным кодом. По умолчанию ./server/index.
  *
+ * APP_LOCALE - Код языка сайта. По умолчанию ru.
+ *
  *
  * Итоговые переменные в process.env:
  *
@@ -45,6 +47,7 @@
  * APP_PATHNAME - Базовый путь в URL сайта.
  * APP_EXTENSIONS - Массив расширений у файлов скриптов.
  * APP_ENTRY - Абсолютный путь к файла точки сборки сайта.
+ * APP_LOCALE - Код языка приложения.
  * APP_* - Прочие переменные окружения, чьё имя начинается с префикса 'APP_'.
  */
 
@@ -58,6 +61,7 @@ const HtmlPlugin = require('html-webpack-plugin');
 const CopyPlugin = require('copy-webpack-plugin');
 const CompressionPlugin = require('compression-webpack-plugin');
 const TsCheckerPlugin = require('fork-ts-checker-webpack-plugin');
+const MomentPlugin = require('moment-locales-webpack-plugin');
 const {
   NamedModulesPlugin,
   HotModuleReplacementPlugin,
@@ -74,7 +78,8 @@ module.exports = (_, args) => {
     APP_BASE_URL: 'http://localhost:8080',
     APP_EXTENSIONS: '.tsx,.ts,.jsx,.js',
     APP_CLIENT_ENTRY: './index',
-    APP_SERVER_ENTRY: './server/index'
+    APP_SERVER_ENTRY: './server/index',
+    APP_LOCALE: 'ru'
   };
 
   const filterEnv = env => {
@@ -98,6 +103,15 @@ module.exports = (_, args) => {
 
   const findEntry = (extensions, name) =>
     extensions.map(extension => `${name}${extension}`).find(fs.existsSync);
+
+  const stringifyEnv = env =>
+    Object.keys(env).reduce(
+      (previous, key) => ({
+        ...previous,
+        [`process.env.${key}`]: JSON.stringify(env[key])
+      }),
+      {}
+    );
 
   const target =
     process.env.APP_TARGET || args.target || defaultOptions.APP_TARGET;
@@ -145,6 +159,8 @@ module.exports = (_, args) => {
     )
   );
 
+  const locale = options.APP_LOCALE;
+
   env = {
     ...fileEnv,
     ...systemEnv,
@@ -161,7 +177,8 @@ module.exports = (_, args) => {
     APP_PORT: port,
     APP_PATHNAME: pathname,
     APP_ENTRY: entry,
-    APP_EXTENSIONS: extensions
+    APP_EXTENSIONS: extensions,
+    APP_LOCALE: locale
   };
 
   const isDevelopment = mode === 'development';
@@ -194,15 +211,7 @@ module.exports = (_, args) => {
       ]
     },
     plugins: [
-      new DefinePlugin(
-        Object.keys(env).reduce(
-          (previous, key) => ({
-            ...previous,
-            [`process.env.${key}`]: JSON.stringify(env[key])
-          }),
-          {}
-        )
-      ),
+      new DefinePlugin(stringifyEnv(env)),
       new TsCheckerPlugin({
         tsconfig: path.resolve(rootPath, 'tsconfig.json'),
         reportFiles: path.relative(
@@ -210,6 +219,9 @@ module.exports = (_, args) => {
           path.join(sourcePath, '**/*.{ts,tsx}')
         ),
         silent: true
+      }),
+      new MomentPlugin({
+        localesToKeep: [locale]
       }),
       ...(isDevelopment
         ? [new HotModuleReplacementPlugin(), new NamedModulesPlugin()]
